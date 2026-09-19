@@ -1,8 +1,10 @@
 package com.pawtrail.notification.infrastructure.persistence;
 
+import com.pawtrail.notification.domain.enums.NotifType;
 import com.pawtrail.notification.domain.model.Notification;
 import com.pawtrail.notification.domain.repository.NotificationRepository;
 import com.pawtrail.notification.infrastructure.persistence.jpa.NotificationJpaRepository;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +25,11 @@ public class NotificationRepositoryImpl implements NotificationRepository {
     @Override
     public Notification save(Notification notification) {
         return notificationJpaRepository.save(notification);
+    }
+
+    @Override
+    public List<Notification> saveAll(List<Notification> notifications) {
+        return notificationJpaRepository.saveAll(notifications);
     }
 
     /**
@@ -48,5 +55,13 @@ public class NotificationRepositoryImpl implements NotificationRepository {
     @Override
     public long countUnreadByAccountId(UUID accountId) {
         return notificationJpaRepository.countByAccountIdAndReadAtIsNull(accountId);
+    }
+
+    @Override
+    public int deleteUnreadPolicyChanged(Collection<UUID> accountIds, UUID placeId) {
+        if (accountIds.isEmpty()) {
+            return 0;
+        }
+        return notificationJpaRepository.deleteUnread(accountIds, placeId, NotifType.POLICY_CHANGED);
     }
 }

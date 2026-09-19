@@ -3,6 +3,8 @@ package com.pawtrail.notification.infrastructure.persistence;
 import com.pawtrail.notification.domain.model.NotificationSetting;
 import com.pawtrail.notification.domain.repository.NotificationSettingRepository;
 import com.pawtrail.notification.infrastructure.persistence.jpa.NotificationSettingJpaRepository;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -32,5 +34,13 @@ public class NotificationSettingRepositoryImpl implements NotificationSettingRep
     @Override
     public Optional<NotificationSetting> findByAccountId(UUID accountId) {
         return notificationSettingJpaRepository.findById(accountId);
+    }
+
+    @Override
+    public List<NotificationSetting> findAllByAccountIds(Collection<UUID> accountIds) {
+        if (accountIds.isEmpty()) {
+            return List.of();
+        }
+        return notificationSettingJpaRepository.findAllById(accountIds);
     }
 }

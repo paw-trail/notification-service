@@ -1,6 +1,7 @@
 package com.pawtrail.notification.domain.repository;
 
 import com.pawtrail.notification.domain.model.Notification;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,6 +16,8 @@ import org.springframework.data.domain.Page;
 public interface NotificationRepository {
 
     Notification save(Notification notification);
+
+    List<Notification> saveAll(List<Notification> notifications);
 
     /**
      * 그 사람의 알림을 최신순으로 한 쪽 읽습니다.
@@ -41,4 +44,12 @@ public interface NotificationRepository {
      * 그 사람의 안 읽은 알림 수를 셉니다. 헤더 벨이 폴링으로 부릅니다.
      */
     long countUnreadByAccountId(UUID accountId);
+
+    /**
+     * 그 사람들에게 그 장소로 나간 안 읽은 조건 변경 알림을 지우고 지운 수를 돌려줍니다.
+     *
+     * 같은 장소의 조건이 거듭 바뀌면 새 알림으로 갈아 끼우려는 것입니다. 읽은 알림은 남깁니다.
+     * 쓰기 트랜잭션 안에서만 부릅니다. 알림을 만드는 일은 Inbox 가 여는 트랜잭션 안에서 돕니다.
+     */
+    int deleteUnreadPolicyChanged(Collection<UUID> accountIds, UUID placeId);
 }

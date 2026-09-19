@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * V20 의 표와 저장소 조회를 실제 PostgreSQL 로 검사합니다.
@@ -31,7 +33,9 @@ class NotificationRepositoryImplTest extends IntegrationTestSupport {
 
     private static final UUID ACCOUNT = UUID.fromString("01999999-0000-7000-8000-000000000001");
     private static final UUID OTHER_ACCOUNT = UUID.fromString("01999999-0000-7000-8000-000000000002");
+    private static final UUID THIRD_ACCOUNT = UUID.fromString("01999999-0000-7000-8000-000000000003");
     private static final UUID PLACE = UUID.fromString("01999999-0000-7000-8000-00000000aaaa");
+    private static final UUID OTHER_PLACE = UUID.fromString("01999999-0000-7000-8000-00000000cccc");
 
     @Autowired
     private NotificationRepository notificationRepository;
@@ -47,6 +51,9 @@ class NotificationRepositoryImplTest extends IntegrationTestSupport {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @AfterEach
     void cleanUp() {
@@ -116,6 +123,44 @@ class NotificationRepositoryImplTest extends IntegrationTestSupport {
         assertThat(found.isPresent()).isTrue();
         assertThat(found.get().isDeleted()).isTrue();
         assertThat(notificationSettingRepository.findByAccountId(OTHER_ACCOUNT).isPresent()).isFalse();
+    }
+
+    @Test
+    @DisplayName("갈아 끼우기는 그 사람들의 그 장소 · 안 읽은 조건 알림만 지운다")
+    void 갈아_끼우기_지우기() {
+        Notification target = notificationRepository.save(notification(ACCOUNT));
+        Notification read = notificationRepository.save(notification(ACCOUNT));
+        notificationRepository.save(Notification.create(
+                ACCOUNT, NotifType.REPORT_RESOLVED, PLACE, "제보하신 내용이 반영되었습니다", "고쳤습니다"));
+        notificationRepository.save(Notification.create(
+                ACCOUNT, NotifType.POLICY_CHANGED, OTHER_PLACE, "동반 조건이 바뀌었습니다", "목줄"));
+        notificationRepository.save(notification(OTHER_ACCOUNT));
+        jdbcTemplate.update("UPDATE notification SET read_at = now() WHERE id = ?", read.getId());
+
+        // 지우기 문장은 쓰기 트랜잭션 안에서만 돎 — 실제로는 Inbox 가 여는 트랜잭션
+        Integer deleted = new TransactionTemplate(transactionManager)
+                .execute(status -> notificationRepository.deleteUnreadPolicyChanged(List.of(ACCOUNT), PLACE));
+
+        List<UUID> left = jdbcTemplate.queryForList("SELECT id FROM notification", UUID.class);
+        assertThat(deleted).isEqualTo(1);
+        assertThat(left).hasSize(4);
+        assertThat(left.contains(target.getId())).isFalse();
+    }
+
+    @Test
+    @DisplayName("설정 여럿 읽기는 탈퇴 표시 행까지 돌려주고 행이 없는 사람은 빠진다")
+    void 설정_여럿() {
+        notificationSettingRepository.save(NotificationSetting.defaults(ACCOUNT));
+        notificationSettingRepository.save(NotificationSetting.defaults(OTHER_ACCOUNT));
+        jdbcTemplate.update(
+                "UPDATE notification_setting SET deleted_at = now(), deleted_by = 'SYSTEM' WHERE account_id = ?",
+                OTHER_ACCOUNT);
+
+        List<NotificationSetting> found = notificationSettingRepository.findAllByAccountIds(
+                List.of(ACCOUNT, OTHER_ACCOUNT, THIRD_ACCOUNT));
+
+        assertThat(found).hasSize(2);
+        assertThat(found.stream().filter(NotificationSetting::isDeleted).count()).isEqualTo(1L);
     }
 
     private static Notification notification(UUID accountId) {
