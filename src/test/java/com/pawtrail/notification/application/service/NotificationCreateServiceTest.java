@@ -3,6 +3,7 @@ package com.pawtrail.notification.application.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -15,6 +16,7 @@ import com.pawtrail.notification.domain.provider.UserProvider;
 import com.pawtrail.notification.domain.provider.dto.FavoritePage;
 import com.pawtrail.notification.domain.repository.NotificationRepository;
 import com.pawtrail.notification.domain.repository.NotificationSettingRepository;
+import com.pawtrail.notification.domain.repository.WithdrawalLockRepository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -48,6 +51,9 @@ class NotificationCreateServiceTest {
     @Mock
     private UserProvider userProvider;
 
+    @Mock
+    private WithdrawalLockRepository withdrawalLockRepository;
+
     @InjectMocks
     private NotificationCreateService service;
 
@@ -58,11 +64,11 @@ class NotificationCreateServiceTest {
     private ArgumentCaptor<Notification> notificationCaptor;
 
     @Test
-    @DisplayName("바뀐 칸이 없으면 명단도 부르지 않고 아무것도 안 만든다")
+    @DisplayName("바뀐 칸이 없으면 잠금도 명단도 부르지 않고 아무것도 안 만든다")
     void 바뀐_칸_없음() {
         service.notifyPolicyChanged(PLACE, 3, List.of());
 
-        verifyNoInteractions(userProvider, notificationRepository, notificationSettingRepository);
+        verifyNoInteractions(userProvider, notificationRepository, notificationSettingRepository, withdrawalLockRepository);
     }
 
     @Test
@@ -80,6 +86,12 @@ class NotificationCreateServiceTest {
 
         service.notifyPolicyChanged(PLACE, 2,
                 List.of("maxWeightKg", "sizeRule", "leashRequired", "carrierRequired"));
+
+        // 탈퇴 잠금을 명단 · 설정보다 먼저 잡아야 함
+        InOrder order = inOrder(withdrawalLockRepository, userProvider, notificationSettingRepository);
+        order.verify(withdrawalLockRepository).lockForCreation();
+        order.verify(userProvider).findFavoriteAccountIds(PLACE, 0);
+        order.verify(notificationSettingRepository).findAllByAccountIds(List.of(A, B, C));
 
         verify(notificationRepository).saveAll(notificationsCaptor.capture());
         List<Notification> saved = notificationsCaptor.getValue();
@@ -112,6 +124,10 @@ class NotificationCreateServiceTest {
 
         service.notifyReportResolved(A, PLACE, "REVIEW_ABUSE", "ACCEPTED", "욕설이 있어 지웠습니다");
 
+        InOrder order = inOrder(withdrawalLockRepository, notificationSettingRepository);
+        order.verify(withdrawalLockRepository).lockForCreation();
+        order.verify(notificationSettingRepository).findByAccountId(A);
+
         Notification saved = notificationCaptor.getValue();
         assertThat(saved.getAccountId()).isEqualTo(A);
         assertThat(saved.getNotifType()).isEqualTo(NotifType.REPORT_RESOLVED);
@@ -137,10 +153,10 @@ class NotificationCreateServiceTest {
     }
 
     @Test
-    @DisplayName("알릴 말이 없는 결과면 설정도 안 보고 만들지 않는다")
+    @DisplayName("알릴 말이 없는 결과면 잠금도 설정도 안 보고 만들지 않는다")
     void 제보_결과_모르는_결과() {
         service.notifyReportResolved(A, PLACE, "INFO_WRONG", "PENDING", "메모");
 
-        verifyNoInteractions(notificationSettingRepository, notificationRepository);
+        verifyNoInteractions(notificationSettingRepository, notificationRepository, withdrawalLockRepository);
     }
 }

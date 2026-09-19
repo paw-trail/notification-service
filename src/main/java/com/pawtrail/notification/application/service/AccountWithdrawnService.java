@@ -4,6 +4,7 @@ import com.pawtrail.common.audit.AuditorProvider;
 import com.pawtrail.notification.domain.model.NotificationSetting;
 import com.pawtrail.notification.domain.repository.NotificationRepository;
 import com.pawtrail.notification.domain.repository.NotificationSettingRepository;
+import com.pawtrail.notification.domain.repository.WithdrawalLockRepository;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ public class AccountWithdrawnService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final AuditorProvider auditorProvider;
+    private final WithdrawalLockRepository withdrawalLockRepository;
 
     /**
      * 설정 행에 탈퇴 표시를 남기고 알림을 지웁니다.
@@ -54,8 +56,13 @@ public class AccountWithdrawnService {
      * 순서가 보이는 대로 나가야 하고, 그 문장이 밀린 쓰기를 먼저 반영하도록 해 두었습니다.
      *
      * 정상 행에서 save 를 부르지 않습니다. 조회해 온 엔티티라 커밋 때 변경 감지가 UPDATE 를 냅니다.
+     *
+     * 맨 먼저 탈퇴 잠금을 배타로 잡습니다(WithdrawalLockRepository).
+     * 진행 중인 알림 만들기가 다 끝난 뒤에 돌아 그것이 쓴 알림까지 지우고,
+     * 이 처리가 끝나기 전에 시작한 만들기는 기다렸다가 탈퇴 표시를 보고 건너뜁니다.
      */
     public void withdraw(UUID accountId) {
+        withdrawalLockRepository.lockForWithdrawal();
         String deletedBy = auditorProvider.current();
 
         NotificationSetting setting = notificationSettingRepository.findByAccountId(accountId).orElse(null);

@@ -32,8 +32,9 @@ import org.hibernate.annotations.UuidGenerator;
 public class Notification extends BaseEntity {
 
     // 표의 폭과 같음 — 넘기면 DB 가 막기 전에 여기서 막음
-    static final int TITLE_MAX = 100;
-    static final int BODY_MAX = 500;
+    // 본문 폭은 문구를 짓는 쪽이 긴 메모를 자를 때도 씀
+    public static final int TITLE_MAX = 100;
+    public static final int BODY_MAX = 500;
 
     @Id
     @UuidGenerator(style = UuidGenerator.Style.VERSION_7)

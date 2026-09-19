@@ -8,6 +8,7 @@ import com.pawtrail.notification.domain.provider.UserProvider;
 import com.pawtrail.notification.domain.provider.dto.FavoritePage;
 import com.pawtrail.notification.domain.repository.NotificationRepository;
 import com.pawtrail.notification.domain.repository.NotificationSettingRepository;
+import com.pawtrail.notification.domain.repository.WithdrawalLockRepository;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,10 @@ import org.springframework.stereotype.Service;
  *   설정 행이 없음           받음 (행이 없으면 전부 받는 것으로 봄)
  *   그 종류를 끔             건너뜀
  *   탈퇴 표시가 찍힘         건너뜀 — 탈퇴보다 늦게 도착한 알림거리
+ *
+ * 설정을 읽기 전에 탈퇴 잠금을 공유로 잡습니다(WithdrawalLockRepository).
+ * 설정을 "받음" 으로 읽은 뒤 쓰기 전에 탈퇴가 끼어들면 탈퇴한 사람의 알림이 남기 때문입니다.
+ * 만들기끼리는 서로 막지 않고, 탈퇴가 진행 중일 때만 기다립니다.
  */
 @Slf4j
 @Service
@@ -43,6 +48,7 @@ public class NotificationCreateService {
     private final NotificationRepository notificationRepository;
     private final NotificationSettingRepository notificationSettingRepository;
     private final UserProvider userProvider;
+    private final WithdrawalLockRepository withdrawalLockRepository;
 
     /**
      * 장소의 조건이 바뀌었을 때 그 장소를 즐겨찾기한 사람들에게 알립니다. policy.changed 를 받으면 부릅니다.
@@ -59,6 +65,9 @@ public class NotificationCreateService {
      * 읽은 알림은 지우지 않습니다. 이미 본 것이라 새 알림과 겹쳐 보이지 않습니다.
      *
      * 명단을 다 모은 뒤에 씁니다. 중간 쪽에서 user 가 멈추면 아무것도 안 쓴 채 다시 시도하게 됩니다.
+     *
+     * 명단을 받기 전에 탈퇴 잠금을 잡습니다. 명단 HTTP 가 도는 동안에도 설정을 읽은 사람이 있어
+     * 그 사이에 탈퇴가 끼어들면 안 되기 때문입니다. 그동안 탈퇴는 기다립니다.
      */
     public void notifyPolicyChanged(UUID placeId, int policyVersion, List<String> changedFields) {
         if (changedFields == null || changedFields.isEmpty()) {
@@ -66,6 +75,7 @@ public class NotificationCreateService {
             return;
         }
         NotificationText text = NotificationText.policyChanged(policyVersion, changedFields);
+        withdrawalLockRepository.lockForCreation();
 
         List<UUID> recipients = new ArrayList<>();
         int favorites = 0;
@@ -100,7 +110,10 @@ public class NotificationCreateService {
      * 다른 서비스를 부르지 않습니다. 받는 사람과 장소가 이벤트에 다 실려 옵니다.
      *
      * 알릴 말이 없는 결과(승인도 반려도 아님)면 알리지 않고 경고를 남깁니다.
-     * 메모가 비어 오면 대체 문구로 알리고 경고를 남깁니다. 둘 다 report 쪽 이상의 신호입니다.
+     * 메모가 비어 오면 대체 문구로, 본문 폭을 넘으면 잘라서 알리고 경고를 남깁니다.
+     * 셋 다 report 쪽 이상의 신호입니다.
+     *
+     * 설정을 읽기 전에 탈퇴 잠금을 잡습니다. 이유는 클래스 주석에 있습니다.
      */
     public void notifyReportResolved(UUID accountId, UUID placeId, String reportType, String status, String memo) {
         Optional<NotificationText> text = NotificationText.reportResolved(reportType, status, memo);
@@ -112,8 +125,12 @@ public class NotificationCreateService {
         if (memo == null || memo.isBlank()) {
             log.warn("처리 메모가 비어 있어 대체 문구로 알립니다: accountId={}, reportType={}, status={}",
                     accountId, reportType, status);
+        } else if (memo.length() > Notification.BODY_MAX) {
+            log.warn("처리 메모가 {}자를 넘어 잘라서 알립니다: accountId={}, length={}",
+                    Notification.BODY_MAX, accountId, memo.length());
         }
 
+        withdrawalLockRepository.lockForCreation();
         Optional<NotificationSetting> setting = notificationSettingRepository.findByAccountId(accountId);
         if (setting.isPresent() && !setting.get().receives(NotifType.REPORT_RESOLVED)) {
             log.info("제보 결과 알림을 만들지 않습니다: accountId={}, reason={}",

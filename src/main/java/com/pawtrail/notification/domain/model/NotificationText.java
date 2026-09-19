@@ -69,8 +69,9 @@ public record NotificationText(String title, String body) {
      * 유형 · 결과를 문자열로 받습니다. report 가 값을 늘려도 여기가 깨지지 않게 하려는 것입니다.
      * 승인도 반려도 아닌 결과는 알릴 말이 없어 빈 값을 돌려줍니다. report 는 그런 결과를 내보내지 않습니다.
      *
-     * 본문은 관리자 메모 그대로입니다. 비어 오면 대체 문구로 둡니다.
-     * report 가 메모를 필수로 받아 비어 올 일은 없으나, 메모 하나 때문에 결과 알림을 잃지 않으려는 것입니다.
+     * 본문은 관리자 메모 그대로입니다. 비어 오면 대체 문구로, 본문 폭을 넘으면 잘라서 둡니다.
+     * report 가 메모를 필수 · 500자로 받아 둘 다 올 일은 없으나, 메모 하나 때문에 결과 알림을 잃지 않으려는 것입니다.
+     * 넘친 채로 두면 알림을 만들 때 예외가 나 재시도해도 같고, 끝내 .dlq 로 갑니다.
      * 사용자에게 중요한 것은 반영됐는지(제목)입니다.
      */
     public static Optional<NotificationText> reportResolved(String reportType, String status, String memo) {
@@ -82,8 +83,25 @@ public record NotificationText(String title, String body) {
         } else {
             return Optional.empty();
         }
-        String body = memo == null || memo.isBlank() ? MEMO_FALLBACK : memo;
+        String body = memo == null || memo.isBlank() ? MEMO_FALLBACK : fitBody(memo);
         return Optional.of(new NotificationText(title, body));
+    }
+
+    /**
+     * 본문 폭을 넘는 메모를 자릅니다. 앞 499자에 "…" 을 붙여 잘린 것이 보이게 합니다.
+     *
+     * 자르는 자리가 두 칸짜리 문자(이모지 같은 서로게이트 쌍)의 한가운데면 그 앞에서 자릅니다.
+     * 반쪽만 남으면 깨진 글자가 됩니다.
+     */
+    static String fitBody(String memo) {
+        if (memo.length() <= Notification.BODY_MAX) {
+            return memo;
+        }
+        int end = Notification.BODY_MAX - 1;
+        if (Character.isHighSurrogate(memo.charAt(end - 1))) {
+            end--;
+        }
+        return memo.substring(0, end) + "…";
     }
 
     private static String fieldsBody(List<String> labels, int total) {

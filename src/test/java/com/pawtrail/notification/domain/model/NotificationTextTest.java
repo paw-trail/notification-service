@@ -63,6 +63,19 @@ class NotificationTextTest {
     }
 
     @Test
+    @DisplayName("본문 폭을 넘는 메모는 앞 499자에 … 를 붙여 자르고, 두 칸짜리 문자를 반으로 가르지 않는다")
+    void 긴_메모() {
+        NotificationText cut = NotificationText.reportResolved("CLOSED", "ACCEPTED", "가".repeat(600)).get();
+        String withEmoji = NotificationText.reportResolved(
+                "CLOSED", "ACCEPTED", "가".repeat(498) + "\uD83D\uDE00" + "나".repeat(10)).get().body();
+
+        assertThat(cut.title()).isEqualTo("제보하신 내용이 반영되었습니다");
+        assertThat(cut.body().length()).isEqualTo(500);
+        assertThat(cut.body().endsWith("…")).isTrue();
+        assertThat(withEmoji).isEqualTo("가".repeat(498) + "…");
+    }
+
+    @Test
     @DisplayName("메모가 비어 오면 대체 문구로 둔다")
     void 빈_메모() {
         assertThat(NotificationText.reportResolved("CLOSED", "ACCEPTED", "  ").get().body())
