@@ -52,4 +52,12 @@ public interface NotificationRepository {
      * 쓰기 트랜잭션 안에서만 부릅니다. 알림을 만드는 일은 Inbox 가 여는 트랜잭션 안에서 돕니다.
      */
     int deleteUnreadPolicyChanged(Collection<UUID> accountIds, UUID placeId);
+
+    /**
+     * 그 계정의 알림을 행째 전부 지우고 지운 수를 돌려줍니다. 탈퇴를 받았을 때 씁니다.
+     *
+     * 읽은 것 · 안 읽은 것 · 종류를 가리지 않습니다.
+     * 쓰기 트랜잭션 안에서만 부릅니다. 탈퇴 처리는 Inbox 가 여는 트랜잭션 안에서 돕니다.
+     */
+    int deleteAllByAccountId(UUID accountId);
 }

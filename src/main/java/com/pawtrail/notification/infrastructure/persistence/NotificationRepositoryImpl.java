@@ -64,4 +64,9 @@ public class NotificationRepositoryImpl implements NotificationRepository {
         }
         return notificationJpaRepository.deleteUnread(accountIds, placeId, NotifType.POLICY_CHANGED);
     }
+
+    @Override
+    public int deleteAllByAccountId(UUID accountId) {
+        return notificationJpaRepository.deleteAllByAccountId(accountId);
+    }
 }

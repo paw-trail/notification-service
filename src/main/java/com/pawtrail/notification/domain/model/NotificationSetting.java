@@ -58,6 +58,19 @@ public class NotificationSetting extends BaseEntity {
     }
 
     /**
+     * 설정 행이 없는 사람이 탈퇴했을 때 남기는 표시 행입니다.
+     *
+     * 칸 값은 기본값(전부 받음)이지만 탈퇴 표시가 찍혀 있어 어느 종류도 받지 않습니다.
+     * 탈퇴보다 늦게 도착한 알림거리가 이 행을 보고 건너뜁니다.
+     * user 의 UserProfile.withdrawnMarker 와 같은 모양입니다.
+     */
+    public static NotificationSetting withdrawnMarker(UUID accountId, String deletedBy) {
+        NotificationSetting setting = defaults(accountId);
+        setting.delete(deletedBy);
+        return setting;
+    }
+
+    /**
      * 보낸 칸만 바꿉니다. null 인 칸은 그대로 둡니다.
      *
      * 탈퇴 표시는 건드리지 않습니다.

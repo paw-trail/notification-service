@@ -148,6 +148,25 @@ class NotificationRepositoryImplTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("탈퇴 지우기는 그 계정의 알림만 전부 지운다 — 읽은 것 · 종류를 가리지 않음")
+    void 계정_알림_전부_지우기() {
+        notificationRepository.save(notification(ACCOUNT));
+        Notification read = notificationRepository.save(Notification.create(
+                ACCOUNT, NotifType.REPORT_RESOLVED, PLACE, "제보하신 내용이 반영되었습니다", "고쳤습니다"));
+        notificationRepository.save(notification(OTHER_ACCOUNT));
+        jdbcTemplate.update("UPDATE notification SET read_at = now() WHERE id = ?", read.getId());
+
+        Integer deleted = new TransactionTemplate(transactionManager)
+                .execute(status -> notificationRepository.deleteAllByAccountId(ACCOUNT));
+
+        Long mine = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM notification WHERE account_id = ?", Long.class, ACCOUNT);
+        assertThat(deleted).isEqualTo(2);
+        assertThat(mine).isEqualTo(0L);
+        assertThat(notificationRepository.countUnreadByAccountId(OTHER_ACCOUNT)).isEqualTo(1L);
+    }
+
+    @Test
     @DisplayName("설정 여럿 읽기는 탈퇴 표시 행까지 돌려주고 행이 없는 사람은 빠진다")
     void 설정_여럿() {
         notificationSettingRepository.save(NotificationSetting.defaults(ACCOUNT));

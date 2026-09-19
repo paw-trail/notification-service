@@ -45,4 +45,14 @@ public interface NotificationJpaRepository extends JpaRepository<Notification, U
     int deleteUnread(@Param("accountIds") Collection<UUID> accountIds,
                      @Param("placeId") UUID placeId,
                      @Param("notifType") NotifType notifType);
+
+    /**
+     * 그 계정의 알림을 한 문장으로 지웁니다. 탈퇴 처리가 씁니다.
+     *
+     * 파생 삭제(deleteBy…)를 쓰지 않습니다. 그것은 행을 하나씩 읽어 지워 알림이 많으면 느립니다.
+     * 앞서 탈퇴 표시를 찍은 변경이 먼저 나가도록 밀린 쓰기를 먼저 반영합니다.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from Notification n where n.accountId = :accountId")
+    int deleteAllByAccountId(@Param("accountId") UUID accountId);
 }

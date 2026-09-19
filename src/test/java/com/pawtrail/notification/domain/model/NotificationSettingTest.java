@@ -48,4 +48,15 @@ class NotificationSettingTest {
         assertThat(setting.receives(NotifType.POLICY_CHANGED)).isFalse();
         assertThat(setting.receives(NotifType.REPORT_RESOLVED)).isFalse();
     }
+
+    @Test
+    @DisplayName("탈퇴 표시 행은 표시가 찍힌 채로 만들어져 어느 종류도 받지 않는다")
+    void 탈퇴_표시_행() {
+        NotificationSetting marker = NotificationSetting.withdrawnMarker(ACCOUNT, "SYSTEM");
+
+        assertThat(marker.getAccountId()).isEqualTo(ACCOUNT);
+        assertThat(marker.isDeleted()).isTrue();
+        assertThat(marker.receives(NotifType.POLICY_CHANGED)).isFalse();
+        assertThat(marker.receives(NotifType.REPORT_RESOLVED)).isFalse();
+    }
 }
